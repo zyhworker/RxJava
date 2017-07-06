@@ -1,11 +1,11 @@
 /**
- * Copyright 2016 Netflix, Inc.
- * 
+ * Copyright (c) 2016-present, RxJava Contributors.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
  * compliance with the License. You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software distributed under the License is
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See
  * the License for the specific language governing permissions and limitations under the License.
@@ -31,18 +31,18 @@ import io.reactivex.functions.Function;
 public class RxVsStreamPerf {
     @Param({ "1", "1000", "1000000" })
     public int times;
-    
+
     Flowable<Integer> range;
-    
-    Observable<Integer> rangeNbp;
+
+    Observable<Integer> rangeObservable;
 
     Flowable<Integer> rangeFlatMap;
 
-    Observable<Integer> rangeNbpFlatMap;
+    Observable<Integer> rangeObservableFlatMap;
 
     Flowable<Integer> rangeFlatMapJust;
 
-    Observable<Integer> rangeNbpFlatMapJust;
+    Observable<Integer> rangeObservableFlatMapJust;
 
     List<Integer> values;
 
@@ -63,54 +63,54 @@ public class RxVsStreamPerf {
                 return Flowable.range(v, 2);
             }
         });
-        
-        rangeNbp = Observable.range(1, times);
 
-        rangeNbpFlatMapJust = rangeNbp.flatMap(new Function<Integer, Observable<Integer>>() {
+        rangeObservable = Observable.range(1, times);
+
+        rangeObservableFlatMapJust = rangeObservable.flatMap(new Function<Integer, Observable<Integer>>() {
             @Override
             public Observable<Integer> apply(Integer v) {
                 return Observable.just(v);
             }
         });
-        
-        rangeNbpFlatMap = rangeNbp.flatMap(new Function<Integer, Observable<Integer>>() {
+
+        rangeObservableFlatMap = rangeObservable.flatMap(new Function<Integer, Observable<Integer>>() {
             @Override
             public Observable<Integer> apply(Integer v) {
                 return Observable.range(v, 2);
             }
         });
-        
-        values = range.toList().toBlocking().first();
-    }
-    
-    @Benchmark
-    public void range(Blackhole bh) {
-        range.subscribe(new LatchedObserver<Integer>(bh));
+
+        values = range.toList().blockingGet();
     }
 
     @Benchmark
-    public void rangeNbp(Blackhole bh) {
-        rangeNbp.subscribe(new LatchedNbpObserver<Integer>(bh));
+    public void range(Blackhole bh) {
+        range.subscribe(new PerfSubscriber(bh));
+    }
+
+    @Benchmark
+    public void rangeObservable(Blackhole bh) {
+        rangeObservable.subscribe(new PerfObserver(bh));
     }
 
     @Benchmark
     public void rangeFlatMap(Blackhole bh) {
-        rangeFlatMap.subscribe(new LatchedObserver<Integer>(bh));
+        rangeFlatMap.subscribe(new PerfSubscriber(bh));
     }
 
     @Benchmark
-    public void rangeNbpFlatMap(Blackhole bh) {
-        rangeNbpFlatMap.subscribe(new LatchedNbpObserver<Integer>(bh));
+    public void rangeObservableFlatMap(Blackhole bh) {
+        rangeObservableFlatMap.subscribe(new PerfObserver(bh));
     }
-    
+
     @Benchmark
     public void rangeFlatMapJust(Blackhole bh) {
-        rangeFlatMapJust.subscribe(new LatchedObserver<Integer>(bh));
+        rangeFlatMapJust.subscribe(new PerfSubscriber(bh));
     }
 
     @Benchmark
-    public void rangeNbpFlatMapJust(Blackhole bh) {
-        rangeNbpFlatMapJust.subscribe(new LatchedNbpObserver<Integer>(bh));
+    public void rangeObservableFlatMapJust(Blackhole bh) {
+        rangeObservableFlatMapJust.subscribe(new PerfObserver(bh));
     }
 
 }

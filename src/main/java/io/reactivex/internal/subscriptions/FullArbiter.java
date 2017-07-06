@@ -1,11 +1,11 @@
 /**
- * Copyright 2016 Netflix, Inc.
- * 
+ * Copyright (c) 2016-present, RxJava Contributors.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
  * compliance with the License. You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software distributed under the License is
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See
  * the License for the specific language governing permissions and limitations under the License.
@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.*;
 import org.reactivestreams.*;
 
 import io.reactivex.disposables.Disposable;
+import io.reactivex.internal.functions.ObjectHelper;
 import io.reactivex.internal.queue.SpscLinkedArrayQueue;
 import io.reactivex.internal.util.*;
 import io.reactivex.plugins.RxJavaPlugins;
@@ -33,20 +34,11 @@ public final class FullArbiter<T> extends FullArbiterPad2 implements Subscriptio
     final SpscLinkedArrayQueue<Object> queue;
 
     long requested;
-    
+
     volatile Subscription s;
-    static final Subscription INITIAL = new Subscription() {
-        @Override
-        public void request(long n) {
-            // deliberately no op
-        }
-        @Override
-        public void cancel() {
-            // deliberately no op
-        }
-    };
-    
-    
+    static final Subscription INITIAL = new InitialSubscription();
+
+
     Disposable resource;
 
     volatile boolean cancelled;
@@ -62,12 +54,11 @@ public final class FullArbiter<T> extends FullArbiterPad2 implements Subscriptio
 
     @Override
     public void request(long n) {
-        if (SubscriptionHelper.validateRequest(n)) {
-            return;
+        if (SubscriptionHelper.validate(n)) {
+            BackpressureHelper.add(missedRequested, n);
+            queue.offer(REQUEST, REQUEST);
+            drain();
         }
-        BackpressureHelper.add(missedRequested, n);
-        queue.offer(REQUEST, REQUEST);
-        drain();
     }
 
     @Override
@@ -77,7 +68,7 @@ public final class FullArbiter<T> extends FullArbiterPad2 implements Subscriptio
             dispose();
         }
     }
-    
+
     void dispose() {
         Disposable d = resource;
         resource = null;
@@ -88,9 +79,13 @@ public final class FullArbiter<T> extends FullArbiterPad2 implements Subscriptio
 
     public boolean setSubscription(Subscription s) {
         if (cancelled) {
+            if (s != null) {
+                s.cancel();
+            }
             return false;
         }
 
+        ObjectHelper.requireNonNull(s, "s is null");
         queue.offer(this.s, NotificationLite.subscription(s));
         drain();
         return true;
@@ -124,80 +119,86 @@ public final class FullArbiter<T> extends FullArbiterPad2 implements Subscriptio
         if (wip.getAndIncrement() != 0) {
             return;
         }
-        
+
         int missed = 1;
-        
+
         final SpscLinkedArrayQueue<Object> q = queue;
         final Subscriber<? super T> a = actual;
-        
+
         for (;;) {
-            
+
             for (;;) {
-                Object o = q.peek();
-                
+
+                Object o = q.poll();
                 if (o == null) {
                     break;
                 }
-                
-                q.poll();
                 Object v = q.poll();
-                
+
                 if (o == REQUEST) {
                     long mr = missedRequested.getAndSet(0L);
                     if (mr != 0L) {
                         requested = BackpressureHelper.addCap(requested, mr);
-                        if (s != null) {
-                            s.request(mr);
+                        s.request(mr);
+                    }
+                } else
+                if (o == s) {
+                    if (NotificationLite.isSubscription(v)) {
+                        Subscription next = NotificationLite.getSubscription(v);
+                        if (!cancelled) {
+                            s = next;
+                            long r = requested;
+                            if (r != 0L) {
+                                next.request(r);
+                            }
+                        } else {
+                            next.cancel();
                         }
-                    }
-                } else 
-                if (o != s) {
-                    continue;
-                } else
-                if (NotificationLite.isSubscription(v)) {
-                    Subscription next = NotificationLite.getSubscription(v);
-                    if (s != null) {
-                        s.cancel();
-                    }
-                    s = next;
-                    long r = requested;
-                    if (r != 0L) {
-                        next.request(r);
-                    }
-                } else 
-                if (NotificationLite.isError(v)) {
-                    q.clear();
-                    dispose();
-                    
-                    Throwable ex = NotificationLite.getError(v);
-                    if (!cancelled) {
-                        cancelled = true;
-                        a.onError(ex);
-                    } else {
-                        RxJavaPlugins.onError(ex);
-                    }
-                } else
-                if (NotificationLite.isComplete(v)) {
-                    q.clear();
-                    dispose();
+                    } else if (NotificationLite.isError(v)) {
+                        q.clear();
+                        dispose();
 
-                    if (!cancelled) {
-                        cancelled = true;
-                        a.onComplete();
-                    }
-                } else {
-                    long r = requested;
-                    if (r != 0) {
-                        a.onNext(NotificationLite.<T>getValue(v));
-                        requested = r - 1;
+                        Throwable ex = NotificationLite.getError(v);
+                        if (!cancelled) {
+                            cancelled = true;
+                            a.onError(ex);
+                        } else {
+                            RxJavaPlugins.onError(ex);
+                        }
+                    } else if (NotificationLite.isComplete(v)) {
+                        q.clear();
+                        dispose();
+
+                        if (!cancelled) {
+                            cancelled = true;
+                            a.onComplete();
+                        }
+                    } else {
+                        long r = requested;
+                        if (r != 0) {
+                            a.onNext(NotificationLite.<T>getValue(v));
+                            requested = r - 1;
+                        }
                     }
                 }
             }
-            
+
             missed = wip.addAndGet(-missed);
             if (missed == 0) {
                 break;
             }
+        }
+    }
+
+    static final class InitialSubscription implements Subscription {
+        @Override
+        public void request(long n) {
+            // deliberately no op
+        }
+
+        @Override
+        public void cancel() {
+            // deliberately no op
         }
     }
 }

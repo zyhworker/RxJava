@@ -1,11 +1,11 @@
 /**
- * Copyright 2016 Netflix, Inc.
- * 
+ * Copyright (c) 2016-present, RxJava Contributors.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
  * compliance with the License. You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software distributed under the License is
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See
  * the License for the specific language governing permissions and limitations under the License.
@@ -37,11 +37,11 @@ public class OperatorMergePerf {
                         return Flowable.just(v);
                     }
                 });
-        LatchedObserver<Integer> o = input.newLatchedObserver();
+        PerfSubscriber o = input.newLatchedObserver();
         Flowable.merge(os).subscribe(o);
 
         if (input.size == 1) {
-            while (o.latch.getCount() != 0);
+            while (o.latch.getCount() != 0) { }
         } else {
             o.latch.await();
         }
@@ -56,11 +56,11 @@ public class OperatorMergePerf {
                     return Flowable.range(0, input.size);
             }
         });
-        LatchedObserver<Integer> o = input.newLatchedObserver();
+        PerfSubscriber o = input.newLatchedObserver();
         Flowable.merge(os).subscribe(o);
-        
+
         if (input.size == 1) {
-            while (o.latch.getCount() != 0);
+            while (o.latch.getCount() != 0) { }
         } else {
             o.latch.await();
         }
@@ -74,10 +74,10 @@ public class OperatorMergePerf {
                     return Flowable.range(0, input.size);
             }
         });
-        LatchedObserver<Integer> o = input.newLatchedObserver();
+        PerfSubscriber o = input.newLatchedObserver();
         Flowable.merge(os).subscribe(o);
         if (input.size == 1) {
-            while (o.latch.getCount() != 0);
+            while (o.latch.getCount() != 0) { }
         } else {
             o.latch.await();
         }
@@ -91,10 +91,10 @@ public class OperatorMergePerf {
                     return Flowable.range(0, input.size).subscribeOn(Schedulers.computation());
             }
         });
-        LatchedObserver<Integer> o = input.newLatchedObserver();
+        PerfSubscriber o = input.newLatchedObserver();
         Flowable.merge(os).subscribe(o);
         if (input.size == 1) {
-            while (o.latch.getCount() != 0);
+            while (o.latch.getCount() != 0) { }
         } else {
             o.latch.await();
         }
@@ -102,11 +102,11 @@ public class OperatorMergePerf {
 
     @Benchmark
     public void mergeTwoAsyncStreamsOfN(final InputThousand input) throws InterruptedException {
-        LatchedObserver<Integer> o = input.newLatchedObserver();
+        PerfSubscriber o = input.newLatchedObserver();
         Flowable<Integer> ob = Flowable.range(0, input.size).subscribeOn(Schedulers.computation());
         Flowable.merge(ob, ob).subscribe(o);
         if (input.size == 1) {
-            while (o.latch.getCount() != 0);
+            while (o.latch.getCount() != 0) { }
         } else {
             o.latch.await();
         }
@@ -114,10 +114,10 @@ public class OperatorMergePerf {
 
     @Benchmark
     public void mergeNSyncStreamsOf1(final InputForMergeN input) throws InterruptedException {
-        LatchedObserver<Integer> o = input.newLatchedObserver();
+        PerfSubscriber o = input.newLatchedObserver();
         Flowable.merge(input.observables).subscribe(o);
         if (input.size == 1) {
-            while (o.latch.getCount() != 0);
+            while (o.latch.getCount() != 0) { }
         } else {
             o.latch.await();
         }
@@ -141,8 +141,8 @@ public class OperatorMergePerf {
             }
         }
 
-        public LatchedObserver<Integer> newLatchedObserver() {
-            return new LatchedObserver<Integer>(bh);
+        public PerfSubscriber newLatchedObserver() {
+            return new PerfSubscriber(bh);
         }
     }
 
